@@ -32,6 +32,7 @@ CleansingFileOn = False
 CleansingPath = "C:\\Users\\yacht\\Dropbox\\20210222_Noto\\Cleansing\\"
 '''
 
+#https://www.gsi.go.jp/sokuchikijun/semidyna03.html
 
 #################################################
 #                Key functions                  #
