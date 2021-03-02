@@ -10,8 +10,10 @@ import pandas as pd
 import os
 import datetime
 from pyproj import Proj
+from jismesh.utils import to_meshcode
 import matplotlib.pyplot as plt
 import PySimpleGUI as sg
+
 
 #################################################
 #           The parameter user changes          #
@@ -172,17 +174,58 @@ def CalculateAccuracy(df): #std [cm]
         
     return result
 
-def CalculateAveragePosition(df):
+
+def current2epoch(df_lat,df_lon): #今期→元期 #https://www.gsi.go.jp/sokuchikijun/semidyna03.html
+    meshcode = to_meshcode(df_lat[0],df_lon[0],2)
+    #print(meshcode)
+    meshcode = str(meshcode)
+    df = pd.read_table("SemiDyna2020.par",header=11) #このファイル，カンマでもタブでもなくてほんとにきもぽよ
+    #print(df)
+    df_str = df.iloc[:,0].values
+    #print(df_str)
+    df_target = [s for s in df_str if meshcode in s]
+    #print(df_target[0])
+    df_target_index = np.where(df_str==df_target[0])[0][0]
+    #print(df_target_index)
+    
+    target = df.iloc[int(df_target_index),:].values[0]
+    target = target.split("  ")
+    Lat_sec_DynaPara = float(target[1])
+    Lon_sec_DynaPara = float(target[2])
+    
+    Lat_deg_DynaPara = Lat_sec_DynaPara /3600
+    Lon_deg_DynaPara = Lon_sec_DynaPara /3600
+    print(Lat_deg_DynaPara)
+    print(Lon_deg_DynaPara)
+    
+    print("Before",df_lat[0])
+    df_lat = df_lat - Lat_deg_DynaPara #足すと元期→今期，引くと今期→元期
+    df_lon = df_lon - Lon_deg_DynaPara
+    print("After",df_lat[0])
+    result = (df_lat,df_lon)
+    
+    return result
+
+def CalculateAveragePosition(df,type="RTK"):
     df = df[df["Status"] == 4]
     
     df_lat = df["Latitude"].values
     df_lon = df["Longitude"].values
     if len(df_lat) == 0:
-        #print("This data is not fixed")
+        print("This data is not fixed")
         FalseResult = (False,False)
         return FalseResult
-    
+            
     df_lat,df_lon = dmm2deg(df_lat,df_lon)
+    
+    if type == "RTK":
+        print("RTK")
+    elif type == "CLAS":
+        print("CLAS")
+        df_lat,df_lon = current2epoch(df_lat,df_lon)
+    else:
+        print("Not define such type of GNSS.")
+    
     df_X,df_Y,utmzone = deg2utm(df_lat, df_lon)
     
     X_ave = np.average(df_X)
@@ -204,7 +247,7 @@ def ShowPositioning(df,figpath,figname):
     df_lat = df["Latitude"].values
     df_lon = df["Longitude"].values
     if len(df_lat) == 0:
-        #print("This data is not fixed")
+        print("This data is not fixed")
         return True
     
     df_lat,df_lon = dmm2deg(df_lat,df_lon)
@@ -212,6 +255,7 @@ def ShowPositioning(df,figpath,figname):
     X_ave = np.average(df_X)
     Y_ave = np.average(df_Y)
     
+    fig = plt.figure() #figを作らないでいきなりpltを作るとグラフがバグる（謎）
     plt.scatter(df_X,df_Y,c="blue")
     plt.scatter(X_ave,Y_ave,c="red")
     plt.xlim([np.min(df_X)-0.2,np.max(df_X)+0.2])
@@ -220,8 +264,8 @@ def ShowPositioning(df,figpath,figname):
     plt.title(figname)
     #plt.show()
     name = figpath + figname
-    plt.ioff()
-    plt.savefig("%s.png" %name)
+    plt.close(fig)
+    fig.savefig("%s.png" %name)
     
     return True
 
@@ -238,6 +282,8 @@ def CreateCleansingFile(df,filepath,filename):
     df_lon = df["Longitude"].values
     if len(df_lat) == 0:
         #print("This data is not fixed")
+        del df_lat
+        del df_lon
         return True
     
     df_lat,df_lon = dmm2deg(df_lat,df_lon)
@@ -259,7 +305,7 @@ def CreateCleansingFile(df,filepath,filename):
 #################################################
 #                 Main program                  #
 #################################################
-def main(DataPath,AreaNumber,FigPath,CleansingPath,FigOn,CleansingOn):
+def main(DataPath,AreaNumber,FigPath,CleansingPath,FigOn,CleansingOn,SemiDynamicOn):
 
     header = ["Format","Time","Latitude","LatType","Longitude","LonType",
               "Status","Satellite","LevelAccuracy","Altitude(sea)","M(sea)",
@@ -276,7 +322,7 @@ def main(DataPath,AreaNumber,FigPath,CleansingPath,FigOn,CleansingOn):
     #Make a list of all files　 
     DirExist = os.path.isdir(DataPath)
     if DirExist == False:
-        #print("Such data path doesn't exist!")
+        print("Such data path doesn't exist!")
         return False
     os.chdir(DataPath)
     files = os.listdir(DataPath)
@@ -286,14 +332,20 @@ def main(DataPath,AreaNumber,FigPath,CleansingPath,FigOn,CleansingOn):
     #print("file type is %s" % ftype)
     #print("file length = %s" % flen)
     
-    AreaFile = MakeFileNameDictionary(AreaNumber,files) #print(AreaFile[1][0]) [AreaName][Number]
+    if SemiDynamicOn:
+        if os.path.isfile("SemiDyna2020.par") == False:
+            print("SemiDyna2020.par file doesn't exist!")
+            return False
     
+    AreaFile = MakeFileNameDictionary(AreaNumber,files) #print(AreaFile[1][0]) [AreaName][Number]
+    conter = 0
     for j in range(AreaNumber): #The number of area
         h = j + 1
         
         for i in range(len(AreaFile[h])): #The number of receivers in an area
+            conter = conter +1
             df = pd.read_csv(AreaFile[h][i],names=header)
-            #print(AreaFile[h][i])
+            print(AreaFile[h][i])
             
             if CheckGGA(df)[0] != True:    
                 df = CheckGGA(df)[1]
@@ -316,7 +368,15 @@ def main(DataPath,AreaNumber,FigPath,CleansingPath,FigOn,CleansingOn):
             #print("X_std:",X_std, "cm")
             #print("Y_std:",Y_std, "cm")
             
-            X_ave,Y_ave = CalculateAveragePosition(df)
+            if SemiDynamicOn:
+                if "aqloc" in AreaFile[h][i]:
+                    X_ave,Y_ave = CalculateAveragePosition(df,"CLAS")
+                elif  "magellan" in AreaFile[h][i]:
+                    X_ave,Y_ave = CalculateAveragePosition(df,"CLAS")
+                else:
+                    X_ave,Y_ave = CalculateAveragePosition(df,"RTK")
+            else:
+                X_ave,Y_ave = CalculateAveragePosition(df,"RTK")
             #print("X_ave:",X_ave)
             #print("Y_ave:",Y_ave)
             
@@ -335,9 +395,10 @@ def main(DataPath,AreaNumber,FigPath,CleansingPath,FigOn,CleansingOn):
                                                 Y_std,
                                                 X_ave,
                                                 Y_ave]
-            
+            #if conter == 2:
+            #   break
             #print("\n")
-            
+        #break   
         
     #print(CreateFileDf)
     
@@ -354,15 +415,16 @@ sg.theme('Dark Blue 3')
 layout = [
     [sg.Text('GNSS analysis as a form of .csv')],
     [sg.Text('Data path', size=(20, 1)),
-         sg.InputText('C:\\Users\\yacht\\Dropbox\\20210222_Noto',key='DataPath')],
+         sg.InputText('D:\\Vebots\\2021GNSStest\\20210222_Noto',key='DataPath')],
     [sg.Text('Area number', size=(20, 1)), 
          sg.InputText("10",key='AreaNumber')],
     [sg.Text('Figure path (option)', size=(20, 1)), 
-         sg.InputText('C:\\Users\\yacht\\Dropbox\\20210222_Noto\\Figure\\',key='FigPath')],
-    [sg.Text('Cleansing file path (option)', size=(20, 1)), 
-         sg.InputText('C:\\Users\\yacht\\Dropbox\\20210222_Noto\\Cleansing\\',key='CleansingPath')], 
+         sg.InputText('D:\\Vebots\\2021GNSStest\\20210222_Noto\\Figure\\',key='FigPath')],
+    [sg.Text('Fix data file path (option)', size=(20, 1)), 
+         sg.InputText('D:\\Vebots\\2021GNSStest\\20210222_Noto\\Cleansing\\',key='CleansingPath')], 
     [sg.Checkbox('Fig on', default=False,key='FigOn')],
-    [sg.Checkbox('Cleansing data on', default=False,key='CleansingOn')],
+    [sg.Checkbox('Fix data on', default=False,key='CleansingOn')],
+    [sg.Checkbox('Semi dynamic on', default=False,key='SemiDynamicOn')],
     [sg.Submit(button_text='Execute')]
 ]
 
@@ -379,7 +441,7 @@ while True:
 
     if event == 'Execute':
         success = main(values['DataPath'],int(values['AreaNumber']),values['FigPath'],
-             values['CleansingPath'],values['FigOn'],values['CleansingOn'])
+             values['CleansingPath'],values['FigOn'],values['CleansingOn'],values['SemiDynamicOn'])
         
         # Popup
         if success == True:
