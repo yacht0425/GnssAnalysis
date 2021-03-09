@@ -4,15 +4,51 @@ Created on Sat Feb 27 13:30:17 2021
 
 @author: yacht
 """
+## import numpy ##
+from numpy import int64
+from numpy import float64
+from numpy import floor
+from numpy import array
+from numpy import where
+from numpy import average
+from numpy import count_nonzero
+from numpy import std
+from numpy import min
+from numpy import max
 
-import numpy as np
-import pandas as pd
-import os
-import datetime
+## import pandas ##
+from pandas import read_csv
+from pandas import read_table
+from pandas import DataFrame
+
+## import os ##
+from os.path import isdir
+from os.path import isfile
+from os import chdir
+from os import listdir
+
+## import matplotlib.pyplot ##
+from matplotlib.pyplot import figure
+from matplotlib.pyplot import xlim
+from matplotlib.pyplot import ylim
+from matplotlib.pyplot import title
+from matplotlib.pyplot import scatter
+#from matplotlib.pyplot import show
+from matplotlib.pyplot import close
+
+## import PysimpleGUI ##
+from PySimpleGUI import InputText
+from PySimpleGUI import Text
+from PySimpleGUI import theme
+from PySimpleGUI import popup
+from PySimpleGUI import Checkbox
+from PySimpleGUI import Submit
+from PySimpleGUI import Window
+
+from datetime import timedelta
 from pyproj import Proj
 from jismesh.utils import to_meshcode
-import matplotlib.pyplot as plt
-import PySimpleGUI as sg
+
 
 
 #################################################
@@ -70,9 +106,9 @@ def DropNanCastData(df):
     df = df.dropna(subset=["Latitude"]) 
     df = df.dropna(subset=["Longitude"]) 
     
-    df["Status"] = df["Status"].astype(np.int64)
-    df["Latitude"] = df["Latitude"].astype(np.float64)
-    df["Longitude"] = df["Longitude"].astype(np.float64)
+    df["Status"] = df["Status"].astype(int64)
+    df["Latitude"] = df["Latitude"].astype(float64)
+    df["Longitude"] = df["Longitude"].astype(float64)
     
     result = df
     
@@ -82,14 +118,14 @@ def PositioningTime(df):
     df = df[df["Status"] != 0]
     
     df_Time = df["Time"].values
-    df_Time = np.array(df_Time, dtype=np.float64)
+    df_Time = array(df_Time, dtype=float64)
     
     if len(df_Time)==0:
         #print("This data is not containing valid data")
         return False
     
     result = df_Time[len(df_Time)-1] - df_Time[0]
-    result = datetime.timedelta(seconds=result)    
+    result = timedelta(seconds=result)    
     
     return result
 
@@ -97,16 +133,16 @@ def CalculateFixRatio(df):
     df = df[df["Status"] != 0]
     
     df_Time = df["Time"].values
-    df_Time = np.array(df_Time, dtype=np.float64)
+    df_Time = array(df_Time, dtype=float64)
     
     if len(df_Time)==0:
         #print("This data is not containing valid data")
         return False
     
     df_Status = df["Status"].values
-    df_Status = np.array(df_Status, dtype=np.int64)
+    df_Status = array(df_Status, dtype=int64)
     
-    df_Status_fix = np.count_nonzero(df_Status == 4)
+    df_Status_fix = count_nonzero(df_Status == 4)
     df_Status_whole = len(df_Status)
     #print(df_Status_fix)
     #print(df_Status_whole)
@@ -118,16 +154,16 @@ def CalculateTimeToFirstFix(df): #[sec]
     df = df[df["Status"] != 0]
     
     df_Status = df["Status"].values
-    df_Status = np.array(df_Status, dtype=np.int64)
+    df_Status = array(df_Status, dtype=int64)
     
-    FixIndex = np.where(df_Status==4)[0]
+    FixIndex = where(df_Status==4)[0]
     if len(FixIndex)==0:
        #print("This data is never fixed... :-(")
        return False
           
     #print(df)   
     df_Time = df["Time"].values
-    df_Time = np.array(df_Time, dtype=np.float64)
+    df_Time = array(df_Time, dtype=float64)
     
     StartTime = df_Time[0]
     FirstFixTime = df_Time[FixIndex[0]]
@@ -138,8 +174,8 @@ def CalculateTimeToFirstFix(df): #[sec]
     return result
 
 def dmm2deg(df_lat_dmm,df_lon_dmm):
-    df_lat_deg = ((df_lat_dmm/100) - np.floor(df_lat_dmm/100)) *5/3 + np.floor(df_lat_dmm/100)
-    df_lon_deg = ((df_lon_dmm/100) - np.floor(df_lon_dmm/100)) *5/3 + np.floor(df_lon_dmm/100)
+    df_lat_deg = ((df_lat_dmm/100) - floor(df_lat_dmm/100)) *5/3 + floor(df_lat_dmm/100)
+    df_lon_deg = ((df_lon_dmm/100) - floor(df_lon_dmm/100)) *5/3 + floor(df_lon_dmm/100)
     
     result = (df_lat_deg, df_lon_deg)    
     
@@ -168,8 +204,8 @@ def CalculateAccuracy(df): #std [cm]
     df_lat,df_lon = dmm2deg(df_lat,df_lon)
     df_X,df_Y,utmzone = deg2utm(df_lat, df_lon)
     
-    X_std = np.std(df_X)*100
-    Y_std = np.std(df_Y)*100
+    X_std = std(df_X)*100
+    Y_std = std(df_Y)*100
     result = (X_std,Y_std)
         
     return result
@@ -179,13 +215,13 @@ def current2epoch(df_lat,df_lon): #今期→元期 #https://www.gsi.go.jp/sokuch
     meshcode = to_meshcode(df_lat[0],df_lon[0],2)
     #print(meshcode)
     meshcode = str(meshcode)
-    df = pd.read_table("SemiDyna2020.par",header=11) #このファイル，カンマでもタブでもなくてほんとにきもぽよ
+    df = read_table("SemiDyna2020.par",header=11) #このファイル，カンマでもタブでもなくてほんとにきもぽよ
     #print(df)
     df_str = df.iloc[:,0].values
     #print(df_str)
     df_target = [s for s in df_str if meshcode in s]
     #print(df_target[0])
-    df_target_index = np.where(df_str==df_target[0])[0][0]
+    df_target_index = where(df_str==df_target[0])[0][0]
     #print(df_target_index)
     
     target = df.iloc[int(df_target_index),:].values[0]
@@ -195,14 +231,17 @@ def current2epoch(df_lat,df_lon): #今期→元期 #https://www.gsi.go.jp/sokuch
     
     Lat_deg_DynaPara = Lat_sec_DynaPara /3600
     Lon_deg_DynaPara = Lon_sec_DynaPara /3600
-    print(Lat_deg_DynaPara)
-    print(Lon_deg_DynaPara)
+    #print(Lat_deg_DynaPara)
+    #print(Lon_deg_DynaPara)
     
-    print("Before",df_lat[0])
+    #print("Before",df_lat[0])
+    #print("Before",df_lon[0])
     df_lat = df_lat - Lat_deg_DynaPara #足すと元期→今期，引くと今期→元期
     df_lon = df_lon - Lon_deg_DynaPara
-    print("After",df_lat[0])
+    #print("After",df_lat[0])
+    #print("After",df_lon[0])
     result = (df_lat,df_lon)
+    print("SemiDynamicCorrection done!!")
     
     return result
 
@@ -228,8 +267,8 @@ def CalculateAveragePosition(df,type="RTK"):
     
     df_X,df_Y,utmzone = deg2utm(df_lat, df_lon)
     
-    X_ave = np.average(df_X)
-    Y_ave = np.average(df_Y)
+    X_ave = average(df_X)
+    Y_ave = average(df_Y)
     
     result = (X_ave,Y_ave)
     
@@ -237,7 +276,7 @@ def CalculateAveragePosition(df,type="RTK"):
 
 
 def ShowPositioning(df,figpath,figname):
-    DirExist = os.path.isdir(figpath)
+    DirExist = isdir(figpath)
     if DirExist == False:
         #print("Such data path doesn't exist!")
         return False
@@ -252,25 +291,25 @@ def ShowPositioning(df,figpath,figname):
     
     df_lat,df_lon = dmm2deg(df_lat,df_lon)
     df_X,df_Y,utmzone = deg2utm(df_lat, df_lon)
-    X_ave = np.average(df_X)
-    Y_ave = np.average(df_Y)
+    X_ave = average(df_X)
+    Y_ave = average(df_Y)
     
-    fig = plt.figure() #figを作らないでいきなりpltを作るとグラフがバグる（謎）
-    plt.scatter(df_X,df_Y,c="blue")
-    plt.scatter(X_ave,Y_ave,c="red")
-    plt.xlim([np.min(df_X)-0.2,np.max(df_X)+0.2])
-    plt.ylim([np.min(df_Y)-0.2,np.max(df_Y)+0.2])
+    fig = figure() #figを作らないでいきなりpyplotを作るとグラフがバグる（謎）
+    scatter(df_X,df_Y,c="blue")
+    scatter(X_ave,Y_ave,c="red")
+    xlim([min(df_X)-0.2,max(df_X)+0.2])
+    ylim([min(df_Y)-0.2,max(df_Y)+0.2])
     
-    plt.title(figname)
-    #plt.show()
+    title(figname)
+    #show()
     name = figpath + figname
-    plt.close(fig)
+    close(fig)
     fig.savefig("%s.png" %name)
     
     return True
 
 def CreateCleansingFile(df,filepath,filename):
-    DirExist = os.path.isdir(filepath)
+    DirExist = isdir(filepath)
     #print(DirExist)
     if DirExist == False:
         #print("Such data path doesn't exist!")
@@ -310,7 +349,7 @@ def main(DataPath,AreaNumber,FigPath,CleansingPath,FigOn,CleansingOn,SemiDynamic
     header = ["Format","Time","Latitude","LatType","Longitude","LonType",
               "Status","Satellite","LevelAccuracy","Altitude(sea)","M(sea)",
               "Altitude(geoid)","M(geoid)","DGPS use","checksum"]
-    CreateFileDf = pd.DataFrame(columns = ["Positioning time",
+    CreateFileDf = DataFrame(columns = ["Positioning time",
                                            "Fix ratio",
                                            "Time to first fix [s]",
                                            "X std [cm]",
@@ -320,12 +359,12 @@ def main(DataPath,AreaNumber,FigPath,CleansingPath,FigOn,CleansingOn,SemiDynamic
     CreateFileDfName = "AnalysisResult.csv"
     
     #Make a list of all files　 
-    DirExist = os.path.isdir(DataPath)
+    DirExist = isdir(DataPath)
     if DirExist == False:
         print("Such data path doesn't exist!")
         return False
-    os.chdir(DataPath)
-    files = os.listdir(DataPath)
+    chdir(DataPath)
+    files = listdir(DataPath)
     #ftype = type(files)
     #flen = len(files)
     #print(files)
@@ -333,18 +372,19 @@ def main(DataPath,AreaNumber,FigPath,CleansingPath,FigOn,CleansingOn,SemiDynamic
     #print("file length = %s" % flen)
     
     if SemiDynamicOn:
-        if os.path.isfile("SemiDyna2020.par") == False:
+        if isfile("SemiDyna2020.par") == False:
             print("SemiDyna2020.par file doesn't exist!")
             return False
     
     AreaFile = MakeFileNameDictionary(AreaNumber,files) #print(AreaFile[1][0]) [AreaName][Number]
+    print(AreaFile)
     conter = 0
     for j in range(AreaNumber): #The number of area
         h = j + 1
         
         for i in range(len(AreaFile[h])): #The number of receivers in an area
             conter = conter +1
-            df = pd.read_csv(AreaFile[h][i],names=header)
+            df = read_csv(AreaFile[h][i],names=header)
             print(AreaFile[h][i])
             
             if CheckGGA(df)[0] != True:    
@@ -411,25 +451,25 @@ def main(DataPath,AreaNumber,FigPath,CleansingPath,FigOn,CleansingOn,SemiDynamic
 #                GUI functions                  #
 #################################################
 # Configure an option
-sg.theme('Dark Blue 3')
+theme('Dark Blue 3')
 layout = [
-    [sg.Text('GNSS analysis as a form of .csv')],
-    [sg.Text('Data path', size=(20, 1)),
-         sg.InputText('D:\\Vebots\\2021GNSStest\\20210222_Noto',key='DataPath')],
-    [sg.Text('Area number', size=(20, 1)), 
-         sg.InputText("10",key='AreaNumber')],
-    [sg.Text('Figure path (option)', size=(20, 1)), 
-         sg.InputText('D:\\Vebots\\2021GNSStest\\20210222_Noto\\Figure\\',key='FigPath')],
-    [sg.Text('Fix data file path (option)', size=(20, 1)), 
-         sg.InputText('D:\\Vebots\\2021GNSStest\\20210222_Noto\\Cleansing\\',key='CleansingPath')], 
-    [sg.Checkbox('Fig on', default=False,key='FigOn')],
-    [sg.Checkbox('Fix data on', default=False,key='CleansingOn')],
-    [sg.Checkbox('Semi dynamic on', default=False,key='SemiDynamicOn')],
-    [sg.Submit(button_text='Execute')]
+    [Text('GNSS analysis as a form of .csv')],
+    [Text('Data path', size=(20, 1)),
+         InputText('D:\\Vebots\\2021GNSStest\\20210129_Tsurunuma\\Analysis',key='DataPath',size=(50,1))],
+    [Text('Area number', size=(20, 1)), 
+         InputText("10",key='AreaNumber',size=(50,1))],
+    [Text('Figure path (option)', size=(20, 1)), 
+         InputText('D:\\Vebots\\2021GNSStest\\20210129_Tsurunuma\\Figure\\',key='FigPath',size=(50,1))],
+    [Text('Fix data file path (option)', size=(20, 1)), 
+         InputText('D:\\Vebots\\2021GNSStest\\20210129_Tsurunuma\\Cleansing\\',key='CleansingPath',size=(50,1))], 
+    [Checkbox('Fig on', default=False,key='FigOn')],
+    [Checkbox('Fix data on', default=False,key='CleansingOn')],
+    [Checkbox('Semi dynamic on', default=False,key='SemiDynamicOn')],
+    [Submit(button_text='Execute')]
 ]
 
 # Make a window
-window = sg.Window('GNSS analysis', layout)
+window = Window('GNSS analysis', layout)
 
 # Event loop
 while True:
@@ -445,9 +485,9 @@ while True:
         
         # Popup
         if success == True:
-            sg.popup('Done making result.',title='Success')
+            popup('Done making result.',title='Success')
         else:
-            sg.popup('Failed',title='Failed')
+            popup('Failed',title='Failed')
 # Discard a window and exit
 window.close()
 
