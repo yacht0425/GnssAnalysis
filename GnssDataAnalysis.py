@@ -245,7 +245,41 @@ def current2epoch(df_lat,df_lon): #今期→元期 #https://www.gsi.go.jp/sokuch
     
     return result
 
-def CalculateAveragePosition(df,type="RTK"):
+def epoch2current(df_lat,df_lon): #元期→今期 #https://www.gsi.go.jp/sokuchikijun/semidyna03.html
+    meshcode = to_meshcode(df_lat[0],df_lon[0],2)
+    #print("Mechcode: ",meshcode)
+    meshcode = str(meshcode)
+    df = read_table("SemiDyna2020.par",header=11) #このファイル，カンマでもタブでもなくてほんとにきもぽよ
+    #print("SemiDyna table: ",df)
+    df_str = df.iloc[:,0].values
+    #print("df_str: ",df_str)
+    df_target = [s for s in df_str if meshcode in s]
+    #print("df_target: ",df_target[0])
+    df_target_index = where(df_str==df_target[0])[0][0]
+    #print("df_target_index: ",df_target_index)
+    
+    target = df.iloc[int(df_target_index),:].values[0]
+    target = target.split("  ")
+    Lat_sec_DynaPara = float(target[1])
+    Lon_sec_DynaPara = float(target[2])
+    
+    Lat_deg_DynaPara = Lat_sec_DynaPara /3600
+    Lon_deg_DynaPara = Lon_sec_DynaPara /3600
+    #print("Lat dyna param: ",Lat_deg_DynaPara)
+    #print("Lon dyna param: ",Lon_deg_DynaPara)
+    
+    #print("Before",df_lat[0])
+    #print("Before",df_lon[0])
+    df_lat = df_lat + Lat_deg_DynaPara #足すと元期→今期，引くと今期→元期
+    df_lon = df_lon + Lon_deg_DynaPara
+    #print("After",df_lat[0])
+    #print("After",df_lon[0])
+    result = (df_lat,df_lon)
+    print("SemiDynamicCorrection done!!")
+    
+    return result
+
+def CalculateAveragePosition(df,semiDyna="false"):
     df = df[df["Status"] == 4]
     
     df_lat = df["Latitude"].values
@@ -257,13 +291,12 @@ def CalculateAveragePosition(df,type="RTK"):
             
     df_lat,df_lon = dmm2deg(df_lat,df_lon)
     
-    if type == "RTK":
-        print("RTK")
-    elif type == "CLAS":
-        print("CLAS")
+    if semiDyna == "current2epoch":
         df_lat,df_lon = current2epoch(df_lat,df_lon)
+    elif semiDyna == "epoch2current":
+        df_lat,df_lon = epoch2current(df_lat,df_lon)
     else:
-        print("Not define such type of GNSS.")
+        print("No semi dyna correction..")
     
     df_X,df_Y,utmzone = deg2utm(df_lat, df_lon)
     
@@ -308,7 +341,7 @@ def ShowPositioning(df,figpath,figname):
     
     return True
 
-def CreateCleansingFile(df,filepath,filename):
+def CreateCleansingFile(df,filepath,filename,semiDyna="false"):# "false", "current2epoch", "epoch2current"
     DirExist = isdir(filepath)
     #print(DirExist)
     if DirExist == False:
@@ -319,6 +352,10 @@ def CreateCleansingFile(df,filepath,filename):
     
     df_lat = df["Latitude"].values
     df_lon = df["Longitude"].values
+    
+    #print(df_lat)
+    #print(df_lon)
+    
     if len(df_lat) == 0:
         #print("This data is not fixed")
         del df_lat
@@ -326,6 +363,18 @@ def CreateCleansingFile(df,filepath,filename):
         return True
     
     df_lat,df_lon = dmm2deg(df_lat,df_lon)
+    
+    if semiDyna == "current2epoch":
+        print("Current to epoch")
+        df_lat, df_lon = current2epoch(df_lat, df_lon)
+        
+    elif semiDyna == "epoch2current":
+        print("Epoch to current")
+        df_lat, df_lon = epoch2current(df_lat, df_lon)
+        
+    else:
+        print("Hoge hoge.")
+    
     df_X,df_Y,utmzone = deg2utm(df_lat, df_lon)
     
     df = df.assign(Lat=df_lat,Lon=df_lon,UTM_X=df_X,UTM_Y=df_Y)
@@ -335,7 +384,7 @@ def CreateCleansingFile(df,filepath,filename):
     df["UTM_X"] = df_X
     df["UTM_Y"] = df_Y
     """
-    filename = filepath + filename + "modified.csv"
+    filename = filepath + filename + "_modified_Semi_%s.csv" %semiDyna
     df.to_csv(filename)
     
     return True
@@ -344,7 +393,7 @@ def CreateCleansingFile(df,filepath,filename):
 #################################################
 #                 Main program                  #
 #################################################
-def main(DataPath,AreaNumber,FigPath,CleansingPath,FigOn,CleansingOn,SemiDynamicOn):
+def main(DataPath,AreaNumber,FigPath,CleansingPath,FigOn,CleansingOn,Current2EpochOn,Epoch2CurrentOn):
 
     header = ["Format","Time","Latitude","LatType","Longitude","LonType",
               "Status","Satellite","LevelAccuracy","Altitude(sea)","M(sea)",
@@ -371,7 +420,7 @@ def main(DataPath,AreaNumber,FigPath,CleansingPath,FigOn,CleansingOn,SemiDynamic
     #print("file type is %s" % ftype)
     #print("file length = %s" % flen)
     
-    if SemiDynamicOn:
+    if Current2EpochOn or Epoch2CurrentOn:
         if isfile("SemiDyna2020.par") == False:
             print("SemiDyna2020.par file doesn't exist!")
             return False
@@ -408,7 +457,8 @@ def main(DataPath,AreaNumber,FigPath,CleansingPath,FigOn,CleansingOn,SemiDynamic
             #print("X_std:",X_std, "cm")
             #print("Y_std:",Y_std, "cm")
             
-            if SemiDynamicOn:
+            #工事中！！！！！
+            if Current2EpochOn:
                 if "aqloc" in AreaFile[h][i]:
                     X_ave,Y_ave = CalculateAveragePosition(df,"CLAS")
                 elif  "magellan" in AreaFile[h][i]:
@@ -420,14 +470,22 @@ def main(DataPath,AreaNumber,FigPath,CleansingPath,FigOn,CleansingOn,SemiDynamic
             #print("X_ave:",X_ave)
             #print("Y_ave:",Y_ave)
             
+            
             if FigOn == True:                
                 if ShowPositioning(df,FigPath,AreaFile[h][i]) != True:
                     return False
                 
             if CleansingOn == True:
-                if CreateCleansingFile(df,CleansingPath,AreaFile[h][i]) != True:
-                    return False
-                
+                if Current2EpochOn == True:
+                    if CreateCleansingFile(df,CleansingPath,AreaFile[h][i],"current2epoch") != True:
+                        return False
+                elif Epoch2CurrentOn == True:
+                    if CreateCleansingFile(df,CleansingPath,AreaFile[h][i],"epoch2current") != True:
+                        return False
+                else:
+                    if CreateCleansingFile(df,CleansingPath,AreaFile[h][i]) != True:
+                        return False
+                 
             CreateFileDf.loc[AreaFile[h][i]] = [positioningTime,
                                                 Fix_ratio,
                                                 TTFF,
@@ -463,8 +521,9 @@ layout = [
     [Text('Fix data file path (option)', size=(20, 1)), 
          InputText('D:\\Vebots\\2021GNSStest\\20210129_Tsurunuma\\Cleansing\\',key='CleansingPath',size=(50,1))], 
     [Checkbox('Fig on', default=False,key='FigOn')],
-    [Checkbox('Fix data on', default=False,key='CleansingOn')],
-    [Checkbox('Semi dynamic on', default=False,key='SemiDynamicOn')],
+    [Checkbox('Create UTM data', default=False,key='CleansingOn')],
+    [Checkbox('Current -> Epoch', default=False,key='Current2EpochOn')],
+    [Checkbox('Epoch -> Current', default=False,key='Epoch2CurrentOn')],
     [Submit(button_text='Execute')]
 ]
 
@@ -481,7 +540,8 @@ while True:
 
     if event == 'Execute':
         success = main(values['DataPath'],int(values['AreaNumber']),values['FigPath'],
-             values['CleansingPath'],values['FigOn'],values['CleansingOn'],values['SemiDynamicOn'])
+             values['CleansingPath'],values['FigOn'],values['CleansingOn'],
+             values['Current2EpochOn'],values['Epoch2CurrentOn'])
         
         # Popup
         if success == True:

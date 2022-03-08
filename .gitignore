@@ -1,0 +1,22 @@
+/Hokuyo Laser
+/opencv
+*.pdf
+*.pptx
+*.jpg
+*.suo
+*.APS
+*.pch
+*.res
+*.obj
+*.idb
+*.pdb
+*.tlog
+*.log
+*.ipch
+*.vcproj
+*.iobj
+*.iodb
+*.tmp
+*.csv
+*.dll
+*.lib
